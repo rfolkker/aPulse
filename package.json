@@ -1,5 +1,5 @@
 {
-  "name": "aPulse",
+  "name": "apulse",
   "version": "1.0.1",
   "type": "module",
   "description": "A one-file NodeJS server status monitoring/notification tool.",
