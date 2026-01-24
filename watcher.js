@@ -180,10 +180,25 @@ while(true) {
 					try {
 						performance.clearResourceTimings();
 						start = performance.now();
-						let response = await fetch(endpoint.url, {
-							signal: AbortSignal.timeout(config.timeout),
-							...endpoint.request,
-						});
+						let response;
+						let attempt = 0;
+						while(attempt<config.retries) {
+							try {
+								attempt++;
+								response = await fetch(endpoint.url, {
+									signal: AbortSignal.timeout(config.timeout),
+									...endpoint.request,
+								});
+								if(response.ok)
+									break;
+								else
+									await delay(1000); // wait a second before retrying
+							} catch(e) {
+								if(attempt>=config.retries)
+									throw e;
+								await delay(1000); // wait a second before retrying
+							}
+						}
 						let content = await response.text();
 						await delay(0); // Ensures that the entry was registered.
 						let perf = performance.getEntriesByType('resource')[0];

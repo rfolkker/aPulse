@@ -4,9 +4,7 @@ export default {
 	responseTimeGood	: 300, // In milliseconds, this and below will be green
 	responseTimeWarning	: 600, // In milliseconds, above this will be red
 	timeout				: 5000, // In milliseconds, requests will be aborted above this
-	verbose				: true, // Whether or not to output pulse messages in the console
-	readableStatusJson	: true, // Format status.json to be human readable
-	logsMaxDatapoints	: 200, // Maximum datapoints history to keep (per endpoint)
+	retries				: 3, // Number of retries when the HTTP request fails
 	telegram			: { // optional, tokens to send notifications through telegram
 		botToken	: '', // Contact @BotFather on telegram to create a bot
 		chatId		: '',// Send a message to the bot, then visit https://api.telegram.org/bot<token>/getUpdates to get the chatId
