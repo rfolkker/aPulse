@@ -1,9 +1,9 @@
 import {promises as fs, watchFile} from 'fs';
-let config = (await import('./config.js')).default;
+let config = (await import('./config/config.js')).default;
 
-watchFile('./config.js', async ()=>{ // Dynamically reload config and watch it for changes.
+watchFile('./config/config.js', async ()=>{ // Dynamically reload config and watch it for changes.
 	try {
-		config = (await import('./config.js?refresh='+Date.now())).default;
+		config = (await import('./config/config.js?refresh='+Date.now())).default;
 		console.log('Reloaded config file.')
 	} catch(e) {
 		console.error(e);
