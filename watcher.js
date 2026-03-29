@@ -176,7 +176,11 @@ while(true) {
 						endpoint_.link = endpoint.link || endpoint.url;
 					endpoint_.logs = endpoint_.logs || [];
 					let start;
-					
+					let responseTimeGood = endpoint.responseTimeGood || config.responseTimeGood;
+					let responseTimeWarning = endpoint.responseTimeWarning || config.responseTimeWarning;
+					endpoint_.responseTimeGood = responseTimeGood;
+					endpoint_.responseTimeWarning = responseTimeWarning;
+
 					try {
 						performance.clearResourceTimings();
 						start = performance.now();
@@ -264,12 +268,13 @@ while(true) {
 						} else {
 							endpoint.consecutiveErrors = 0;
 							let emoji = '🟢';
-							if(endpointStatus.ttfb>config.responseTimeWarning) {
+							
+							if(endpointStatus.ttfb>responseTimeWarning) {
 								emoji = '🟥';
 								endpoint.consecutiveHighLatency = (endpoint.consecutiveHighLatency || 0) + 1;
 							} else {
 								endpoint.consecutiveHighLatency = 0;
-								if(endpointStatus.ttfb>config.responseTimeGood)
+								if(endpointStatus.ttfb>responseTimeGood)
 									emoji = '🔶';
 							}
 							config.verbose && console.log(`\t${emoji} ${site.name || siteId} — ${endpoint.name || endpointId} [${endpointStatus.ttfb.toFixed(2)}ms]`);
