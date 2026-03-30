@@ -29,7 +29,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 				let nEndpoints = 0;
 				let endpointPoints = [];
-				let endpointState = 0; // 0 = no data, 1 = healthy, 2 = degraded, 3 = highly-degraded, 4 = outage
 				for (let endpointId of endpointIds) {
 					let endpoint = site.endpoints[endpointId];
 					if(!endpoint)
@@ -53,8 +52,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 					$endpoint.append($endpointName);
 
 					let $statusBarEndpoint = document.createElement('status-bar');
-					let [state,points] = $statusBarEndpoint.setLogs(endpoint.logs, timeWarning, timeGood);
-					endpointState = endpointState < state ? state : endpointState; // Hiest state is pushed to site
+					let points = $statusBarEndpoint.setLogs(endpoint.logs, timeWarning, timeGood);
 					endpointPoints.push(points);
 					$endpoint.append($statusBarEndpoint);
 
@@ -72,7 +70,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 						let tcp = Math.max(...endpointPoints.map(p=>p[i]?.tcp).filter(p=>p));
 						combinedLogs.push({t, err, ttfb, dur, dns, tcp});
 					}
-					$statusBar.setLogs(combinedLogs, config.responseTimeWarning, config.responseTimeGood, endpointState);
+					$statusBar.setLogs(combinedLogs, config.responseTimeWarning, config.responseTimeGood);
 					$site.querySelector('h1').after($statusBar);
 				}
 			}
@@ -107,20 +105,19 @@ class StatusBar extends HTMLElement {
 	constructor() {
 		super();
 	}
-	setLogs(logs, timeWarning, timeGood,checkState=0) {
+	setLogs(logs, timeWarning, timeGood) {
 		this.innerHTML = '';
 		this.logs = logs;
 		let points = [];
 		let lastDate = lastPulse;
 		let statusTypes = ['none', 'healthy', 'degraded', 'highly-degraded', 'outage'];
-		let state = checkState;
+
 		if(lastPulse < (Date.now() - config.interval*60_000 - 20_000 )) { // Detect when last pulse is too long ago, give grace period of 20sec -> Watcher is probably down, use Date.now
 			lastDate = Date.now();
 		}
 		for(let i=config.nDataPoints-1;i>=0;i--) {
 			let date = lastDate - i * config.interval * 60_000;
 			let point = findClosestPoint(logs, date, config.interval * 60_000/2);
-			points.push(point);
 			const $entry = document.createElement('status-bar-entry');
 			$entry.setAttribute('tabindex', 0);
 			if(point) {
@@ -128,29 +125,36 @@ class StatusBar extends HTMLElement {
 					<strong>${formatDate(point.t)}</strong>
 					<em></em>
 				</div>`;
+				// Get the state of the crrent point, if it is not set, calculate it based on the ttfb and error, 
+				//  then assign it to the point for future reference (used for site status calculation)
+
+				let checkState = point.state || 0;
 				if(checkState == 0){ // If the status has been set, it is a site status, else it is an endpoint
 					if(point.err) {
-						state = 4;
+						checkState = 4;
 						$entry.querySelector('em').before(point.err);
 					} else {
 						if(point.ttfb > timeWarning) {
-							state = 3;
+							checkState = 3;
 						} else if(point.ttfb > timeGood) {
-							state = 2;
+							checkState = 2;
 						} else {
-							state = 1;
+							checkState = 1;
 						}
 					}
+					// Assign the state to the point, so it can be used for site status calculation
+					point.state = checkState;
 				}
-				$entry.setAttribute('data-status', statusTypes[state]);
+				$entry.setAttribute('data-status', statusTypes[checkState]);
 				$entry.querySelector('em').innerText = `Latency: ${point.ttfb.toFixed(2)}ms`;
 			} else {
 				$entry.setAttribute('data-status', 'none');
 				$entry.innerHTML = `<div><strong>No Data</strong></div>`;
 			}
+			points.push(point);
 			this.append($entry);
 		}
-		return [state,points];
+		return points;
 	}
 }
 customElements.define('status-bar', StatusBar);
