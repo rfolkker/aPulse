@@ -68,7 +68,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 						let dur = Math.max(...endpointPoints.map(p=>p[i]?.dur).filter(p=>p));
 						let dns = Math.max(...endpointPoints.map(p=>p[i]?.dns).filter(p=>p));
 						let tcp = Math.max(...endpointPoints.map(p=>p[i]?.tcp).filter(p=>p));
-						combinedLogs.push({t, err, ttfb, dur, dns, tcp});
+						let state = Math.max(...endpointPoints.map(p=>p[i]?.state).filter(p=>p));
+						combinedLogs.push({t, err, ttfb, dur, dns, tcp, state});
 					}
 					$statusBar.setLogs(combinedLogs, config.responseTimeWarning, config.responseTimeGood);
 					$site.querySelector('h1').after($statusBar);
