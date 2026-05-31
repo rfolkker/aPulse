@@ -30,7 +30,7 @@ export default {
 		toFromEmail		: '',
 	},
 	elastic				: { // optional, config to send events to Elastic
-		url				: ``, // Your Elastic URL, e.g. https://your-domain.com:9200
+		url				: '', // Your Elastic URL, e.g. https://your-domain.com:9200
 		apiKey			: '', // Your Elastic API key with permissions to index documents, e.g. AbCdEfGhIjKlMnOpQrStUvWxYz1234567890
 		index			: 'monitor-index', // The Elastic index where events should be stored
 	},

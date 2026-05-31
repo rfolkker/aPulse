@@ -1,4 +1,7 @@
+import { warn } from 'console';
 import {promises as fs, watchFile} from 'fs';
+import { Client } from '@elastic/elasticsearch';
+
 let config = (await import('./config/config.js')).default;
 
 watchFile('./config/config.js', async ()=>{ // Dynamically reload config and watch it for changes.
@@ -9,6 +12,63 @@ watchFile('./config/config.js', async ()=>{ // Dynamically reload config and wat
 		console.error(e);
 	}
 });
+async function verifyConfig() {
+	let warned = false;
+	if(!config.sites || !Array.isArray(config.sites) || config.sites.length==0) {
+		console.warn('Config should have a "sites" array with at least one site to monitor.');
+		warned = true;
+	} 
+	else {
+		for(let site of config.sites) {
+			if(!site.name && !site.id){
+				console.warn('Each site should have at least a "name" or "id" property for better identification.');
+				warned = true;
+			}
+			if(!site.endpoints || !Array.isArray(site.endpoints) || site.endpoints.length==0){
+				console.warn(`Site "${site.name || site.id}" should have an "endpoints" array with at least one endpoint to monitor.`);
+				warned = true;
+			}
+			else {
+				for(let endpoint of site.endpoints) {
+					if(!endpoint.url) {
+						console.warn(`Each endpoint in site "${site.name || site.id}" should have a "url" property to specify the endpoint URL.`);
+						warned = true;
+					}
+				}
+			}
+		}
+	}
+	if(!warned){
+		console.log('Config looks good.');
+		// Give a list of configured sites and endpoints
+		for(let site of config.sites) {
+			console.log(`- ${site.name || site.id}:`);
+			for(let endpoint of site.endpoints) {
+				console.log(`  - ${endpoint.name || endpoint.url}`);
+			}
+		}
+		// Give a list of enabled notification channels
+		console.log('Enabled notification channels:');
+		if(config.telegram?.botToken && config.telegram?.chatId)
+			console.log('- Telegram');
+		if(config.slack?.botToken && config.slack?.channelId)
+			console.log('- Slack');
+		if(config.discord?.webhookUrl)
+			console.log('- Discord');
+		if(config.twilio?.accountSid && config.twilio?.accountToken && config.twilio?.toNumber && config.twilio?.twilioNumber)
+			console.log('- Twilio SMS');
+		if(config.sendgrid?.apiKey && config.sendgrid?.toEmail && config.sendgrid?.toFromEmail)
+			console.log('- SendGrid Email');
+
+		// Give a list of enabled event handlers
+		console.log('Enabled event handlers:');
+		if(config.elastic?.url && config.elastic?.apiKey)
+			console.log('- Elastic');
+		// New handlers go here
+	}
+}
+// Run the verification once at startup
+(await verifyConfig());
 
 const statusFile = './static/status.json';
 
@@ -123,6 +183,43 @@ const sendNotification = async (message) => {
 	if(config.sendgrid?.apiKey && config.sendgrid?.toEmail && config.sendgrid?.toFromEmail)
 		await sendEmailMessage(message);
 }
+// Events
+const sendElasticEvent = async (eventData) => {
+	// Config will have the url, username, password and index for Elastic, and this function will send a POST request to the Elastic API to index the event data.
+	const client = new Client({
+	node: config.elastic.url,
+	auth: {
+		apiKey: config.elastic.apiKey
+	}
+	});
+	// Data structure is:
+	const dataset = [eventData];
+
+	// Index with the bulk helper
+	const result = await client.helpers.bulk({
+	datasource: dataset,
+	onDocument (doc) {
+		return { index: { _index: config.elastic.index || 'ado-endpoint-monitor' }};
+	}
+	});
+	console.log(result);
+
+}
+// If perf is valid, generate a datetime object, else return the current time
+const perfToTime  = async (perf) => {
+	if(!perf) return Date.now()
+	return new Date(perf).toISOString();
+}
+const sendEvent = async (eventData) => {
+	// TODO: Implement event sending logic (e.g., push to Elastic, other databases/services)
+	if (config.elastic?.url && config.elastic?.apiKey) {
+		try {
+			await sendElasticEvent(eventData);
+		} catch(e) {
+			console.error('Failed to send event to Elastic:', e);
+		}
+	}
+};
 
 while(true) {
 	config.verbose && console.log('🔄 Pulse');
@@ -180,7 +277,24 @@ while(true) {
 					let responseTimeWarning = endpoint.responseTimeWarning || config.responseTimeWarning;
 					endpoint_.responseTimeGood = responseTimeGood;
 					endpoint_.responseTimeWarning = responseTimeWarning;
-
+					let eventData = {
+						"instance_id": config.instanceId || 'default-instance',
+						"instanceId": config.instanceId || 'default-instance',
+						"link": endpoint_.link,
+						"endpoint_id": endpointId,
+						"endpointId": endpointId,
+						"endpoint_name": endpoint.name,
+						"endpointName": endpoint.name,
+						"site_id": siteId,
+						"siteId": siteId,
+						"site_name": site.name,
+						"siteName": site.name,
+						"good_threshold": responseTimeGood,
+						"goodThreshold": responseTimeGood,
+						"warning_threshold": responseTimeWarning,
+						"warningThreshold": responseTimeWarning,
+					};// Timing data needs to be added into here as well as event time and status
+					let eventTime = Date.now();
 					try {
 						performance.clearResourceTimings();
 						start = performance.now();
@@ -206,6 +320,7 @@ while(true) {
 						let content = await response.text();
 						await delay(0); // Ensures that the entry was registered.
 						let perf = performance.getEntriesByType('resource')[0];
+						eventTime = await perfToTime(perf.startTime+performance.timeOrigin); // Use the start time from the performance entry if available, otherwise use the current time.
 						if(perf) {
 							endpointStatus.dur = perf.responseEnd - perf.startTime; // total request duration
 							endpointStatus.dns = perf.domainLookupEnd - perf.domainLookupStart; // DNS Lookup
@@ -247,6 +362,13 @@ while(true) {
 							endpointStatus.ttfb = endpointStatus.dur;
 						}
 					} finally {
+						// TODO: Add push to Elastic support here
+						// This should be a scalable function similar to sendNotification that can have multiple handlers (e.g. for different Elastic indices, or other databases/services)
+						eventData["event_time"] = eventTime;
+						eventData["performance"] = {
+							...endpointStatus,
+						};
+						sendEvent(eventData);
 						endpoint_.logs.push(endpointStatus);
 						if(endpoint_.logs.length > config.logsMaxDatapoints) // Remove old datapoints
 							endpoint_.logs.splice(0, endpoint_.logs.length - config.logsMaxDatapoints);

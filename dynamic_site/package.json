@@ -1,0 +1,17 @@
+{
+  "name": "apulse",
+  "version": "1.0.0",
+  "description": "apulse dynamic User Interface",
+  "license": "ISC",
+  "author": "Darnell Otterson",
+  "type": "module",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^9.3.4",
+    "express": "^5.2.1"
+  }
+}
